@@ -1,0 +1,196 @@
+openapi: 3.0.3
+info:
+  title: Housing Sentinel Open API（房哨兵开放API）
+  version: "1.0"
+  description: |
+    中国12个主要城市官方房产成交数据与进攻/防守市场信号。
+    订阅用户在 housingsentinel.cn「我的→接入AI Agent」生成 API Key。
+    数据每日更新一次，建议轮询间隔≥1小时。限流：60次/分、2000次/天。
+    数据仅限订阅者本人使用，不得对外提供数据服务。
+  contact:
+    url: https://housingsentinel.cn
+servers:
+  - url: https://api.housingsentinel.cn/api/v1
+security:
+  - bearerAuth: []
+paths:
+  /signals:
+    get:
+      operationId: getSignals
+      summary: 获取全部已订阅城市的当前市场信号快照（主接口）
+      description: 返回每个订阅城市的市场阶段（防守/观察/进攻/快速进攻）、一手/二手库存去化周期、月均成交、库存与数据日期。
+      responses:
+        "200":
+          description: 信号列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  generatedAt: { type: string, format: date-time }
+                  cities:
+                    type: array
+                    items: { $ref: "#/components/schemas/CitySignal" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /cities:
+    get:
+      operationId: listCities
+      summary: 已订阅城市列表与阈值元数据
+      responses:
+        "200":
+          description: 城市列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  cities:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        cityCode: { type: string, example: xiamen }
+                        city: { type: string, example: 厦门 }
+                        thresholds: { $ref: "#/components/schemas/Thresholds" }
+  /cities/{city}/signal:
+    get:
+      operationId: getCitySignal
+      summary: 单城市当前市场信号
+      parameters: [ { $ref: "#/components/parameters/City" } ]
+      responses:
+        "200":
+          description: 城市信号
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CitySignal" }
+        "403": { $ref: "#/components/responses/NotSubscribed" }
+        "404": { description: 城市不存在或暂无数据 }
+  /cities/{city}/metrics:
+    get:
+      operationId: getCityMetrics
+      summary: 逐日指标时间序列（去化周期/库存/月均成交，用于趋势分析）
+      parameters:
+        - { $ref: "#/components/parameters/City" }
+        - { name: from, in: query, schema: { type: string, format: date }, description: 开始日期，默认 to 往前90天 }
+        - { name: to, in: query, schema: { type: string, format: date }, description: 结束日期，默认今天；跨度最长366天 }
+      responses:
+        "200":
+          description: 指标序列
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  cityCode: { type: string }
+                  metrics:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date: { type: string, format: date }
+                        firstHandCycle: { type: number, nullable: true, description: 一手去化周期（月） }
+                        secondHandCycle: { type: number, nullable: true, description: 二手去化周期（月） }
+                        firstHandInventory: { type: integer, nullable: true }
+                        secondHandInventory: { type: integer, nullable: true }
+                        firstHandAvgMonthly: { type: integer, nullable: true }
+                        secondHandAvgMonthly: { type: integer, nullable: true }
+        "403": { $ref: "#/components/responses/NotSubscribed" }
+  /cities/{city}/history:
+    get:
+      operationId: getCityHistory
+      summary: 原始日度成交/库存数据（单次最多400条）
+      parameters:
+        - { $ref: "#/components/parameters/City" }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: 原始数据
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  count: { type: integer }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date: { type: string, format: date }
+                        firstHandSubscription: { type: integer, nullable: true, description: 一手认购套数 }
+                        firstHandTransaction: { type: integer, nullable: true, description: 一手网签成交套数 }
+                        firstHandInventory: { type: integer, nullable: true, description: 一手库存套数 }
+                        secondHandTransaction: { type: integer, nullable: true, description: 二手网签成交套数 }
+                        secondHandInventory: { type: integer, nullable: true, description: 二手库存套数 }
+        "403": { $ref: "#/components/responses/NotSubscribed" }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: 房哨兵 API Key（hs_live_...），在「我的→接入AI Agent」生成
+  parameters:
+    City:
+      name: city
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [shenzhen, shanghai, beijing, guangzhou, hangzhou, nanjing, suzhou, wuxi, chengdu, chongqing, dongguan, xiamen]
+      description: 城市代码（拼音全拼）
+  schemas:
+    Thresholds:
+      type: object
+      properties:
+        cycleDefense: { type: number, example: 18, description: 防守期阈值（月） }
+        cycleWatch: { type: number, example: 12, description: 观察期阈值（月） }
+        cycleBuy: { type: number, example: 8, description: 进攻期阈值（月） }
+        monthlyBullLine: { type: integer, description: 月成交荣枯线（套） }
+        monthlyBoomLine: { type: integer, description: 月成交暴涨线（套） }
+    HandStats:
+      type: object
+      properties:
+        inventoryCycle: { type: number, nullable: true, description: 库存去化周期（月）；成都/重庆一手恒为null }
+        inventory: { type: integer, nullable: true, description: 库存套数 }
+        avgMonthly: { type: integer, nullable: true, description: 月均成交套数 }
+        monthTotal: { type: integer, description: 当月累计成交套数 }
+        refYearMonth: { type: string, nullable: true, description: 月均成交参考月份 }
+        isMonthlySnapshot: { type: boolean, description: true=月均来自月度快照而非当月日报投影 }
+    CitySignal:
+      type: object
+      properties:
+        cityCode: { type: string, example: xiamen }
+        city: { type: string, example: 厦门 }
+        dataDate: { type: string, format: date, description: 数据截止日期 }
+        phase:
+          type: string
+          description: 市场阶段
+          enum: [防守期, 观察期, 进攻/买入期, 快速进攻/买入期, 突破荣枯线, 突破景气线, 突破暴涨线, 数据不足]
+        phaseSource: { type: string, enum: [cycle, volume, none], description: 判定依据（去化周期/成交量/数据不足） }
+        firstHand: { $ref: "#/components/schemas/HandStats" }
+        secondHand: { $ref: "#/components/schemas/HandStats" }
+        thresholds: { $ref: "#/components/schemas/Thresholds" }
+  responses:
+    Unauthorized:
+      description: API Key 缺失或无效
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success: { type: boolean, example: false }
+              error:
+                type: object
+                properties:
+                  code: { type: string, example: INVALID_API_KEY }
+                  message: { type: string }
+    NotSubscribed:
+      description: 当前订阅不包含该城市
+    RateLimited:
+      description: 超出限流（60次/分、2000次/天）

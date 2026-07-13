@@ -1,0 +1,25 @@
+# Housing Sentinel（房哨兵）
+
+> Official daily housing-transaction data and offense/defense market signals for 12 major Chinese cities (Shenzhen, Shanghai, Beijing, Guangzhou, Hangzhou, Nanjing, Suzhou, Wuxi, Chengdu, Chongqing, Dongguan, Xiamen). Signals are based on second-hand housing inventory absorption cycles: >=18 months = defense, 12-18 = watch, 8-12 = buy, <8 = strong buy.
+
+房哨兵提供中国12个主要城市的官方房产成交数据（一手/二手成交、库存、去化周期）与进攻/防守市场信号，面向订阅用户开放 REST API 与 MCP 接入。
+
+## Access
+
+- Product & subscription: https://housingsentinel.cn
+- REST API base: https://api.housingsentinel.cn/api/v1 (Bearer auth with `hs_live_...` key, generated at My -> AI Agent after subscribing)
+- MCP server (Streamable HTTP): https://api.housingsentinel.cn/mcp (same Bearer auth; tools: list_cities, get_market_signal, get_metrics, get_history)
+- OpenAPI spec & examples: https://github.com/SheldonZhuang/housing-sentinel-ai
+
+## Key endpoints
+
+- GET /api/v1/signals — current market signals for all subscribed cities (primary endpoint)
+- GET /api/v1/cities/{city}/signal — single city signal
+- GET /api/v1/cities/{city}/metrics — daily indicator time series
+- GET /api/v1/cities/{city}/history — raw daily transaction/inventory data
+
+## Usage notes
+
+- Data updates once per day; recommended polling interval >= 1 hour
+- Rate limits: 60 req/min, 2000 req/day per account
+- Data is licensed for the subscriber's own use only; redistribution as a data service is prohibited

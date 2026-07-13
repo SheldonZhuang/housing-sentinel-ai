@@ -1,0 +1,64 @@
+{
+  "name": "房哨兵每日信号监控",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 8 * * *" }]
+        }
+      },
+      "name": "每天8点触发",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://api.housingsentinel.cn/api/v1/signals",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "拉取房哨兵信号",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "房哨兵 API Key（Header: Authorization = Bearer hs_live_...）"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 与上次运行对比，找出阶段发生跨越的城市\nconst cities = $input.first().json.cities || [];\nconst staticData = $getWorkflowStaticData('global');\nconst last = staticData.phases || {};\nconst changes = [];\nfor (const c of cities) {\n  if (last[c.cityCode] && last[c.cityCode] !== c.phase) {\n    changes.push(`⚡ ${c.city}: ${last[c.cityCode]} → ${c.phase}（二手去化周期 ${c.secondHand.inventoryCycle ?? '—'} 月，数据日期 ${c.dataDate}）`);\n  }\n  last[c.cityCode] = c.phase;\n}\nstaticData.phases = last;\nreturn changes.length ? [{ json: { message: changes.join('\\n') } }] : [];"
+      },
+      "name": "阶段跨越检测",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WECOM_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ msgtype: 'text', text: { content: '【房哨兵】市场阶段跨越提醒\\n' + $json.message } }) }}",
+        "options": {}
+      },
+      "name": "企业微信机器人通知",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0],
+      "notes": "把 WECOM_WEBHOOK_URL 换成你的企业微信群机器人 Webhook；也可替换为邮件/Telegram/钉钉节点"
+    }
+  ],
+  "connections": {
+    "每天8点触发": { "main": [[{ "node": "拉取房哨兵信号", "type": "main", "index": 0 }]] },
+    "拉取房哨兵信号": { "main": [[{ "node": "阶段跨越检测", "type": "main", "index": 0 }]] },
+    "阶段跨越检测": { "main": [[{ "node": "企业微信机器人通知", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": { "description": "每天早8点拉取房哨兵全部订阅城市信号，任一城市市场阶段发生跨越（如观察期→进攻期）时推送企业微信。导入后：①在 HTTP 节点配置 Header 凭证 Authorization: Bearer hs_live_你的密钥 ②设置环境变量 WECOM_WEBHOOK_URL" }
+}
