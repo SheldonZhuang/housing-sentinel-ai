@@ -8,6 +8,7 @@ Connect official daily housing-transaction data & market signals for 12 major Ch
 
 [![官网](https://img.shields.io/badge/%E5%AE%98%E7%BD%91-housingsentinel.cn-1677ff)](https://housingsentinel.cn)
 [![MCP](https://img.shields.io/badge/MCP-Streamable%20HTTP-8b5cf6)](#方式-amcp-接入claude--cursor-等推荐)
+[![smithery badge](https://smithery.ai/badge/sdzhuang/housing-sentinel-ai)](https://smithery.ai/servers/sdzhuang/housing-sentinel-ai)
 [![REST API](https://img.shields.io/badge/REST-OpenAPI%203.0-22c55e)](./openapi.yaml)
 [![Claude Skill](https://img.shields.io/badge/Claude-Skill-d97706)](./skills/housing-sentinel/SKILL.md)
 [![城市](https://img.shields.io/badge/%E8%A6%86%E7%9B%96%E5%9F%8E%E5%B8%82-12-ef4444)](#覆盖城市与数据)

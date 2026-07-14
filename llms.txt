@@ -9,6 +9,7 @@
 - Product & subscription: https://housingsentinel.cn
 - REST API base: https://api.housingsentinel.cn/api/v1 (Bearer auth with `hs_live_...` key, generated at My -> AI Agent after subscribing)
 - MCP server (Streamable HTTP): https://api.housingsentinel.cn/mcp (same Bearer auth; tools: list_cities, get_market_signal, get_metrics, get_history)
+- MCP server on Smithery: https://smithery.ai/servers/sdzhuang/housing-sentinel-ai
 - OpenAPI spec & examples: https://github.com/SheldonZhuang/housing-sentinel-ai
 
 ## Key endpoints
