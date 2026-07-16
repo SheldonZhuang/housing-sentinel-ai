@@ -36,7 +36,7 @@ Connect official daily housing-transaction data & market signals for 12 major Ch
 
 [房哨兵](https://housingsentinel.cn)是一个房产市场数据监控 SaaS：每日自动抓取各市住建局/房管局**官方发布**的住宅成交与库存数据，计算库存去化周期，输出"防守 / 观察 / 进攻 / 快速进攻"四档市场信号，帮助购房者和投资者把握交易时机。
 
-本仓库是它的 **AI 接入中心**——订阅用户可以通过 MCP、REST API 或 Claude Skill，把这些数据和信号接进 Claude、Cursor、扣子、Dify、n8n 或任何自建 Agent 工作流。
+本仓库是它的 **AI 接入中心**——通过 MCP、REST API 或 Claude Skill，把这些数据和信号接进 Claude、Cursor、扣子、Dify、n8n 或任何自建 Agent 工作流。**新用户免费试用**：登录生成密钥后，首次调用起 3 天内可查询深圳数据；订阅任一城市解锁对应城市全量数据。
 
 > 📌 本仓库只包含公开接入文档与示例，不包含房哨兵实现代码。
 
@@ -68,7 +68,7 @@ Connect official daily housing-transaction data & market signals for 12 major Ch
 
 ## 快速开始（3 步）
 
-1. **订阅**：在 [housingsentinel.cn](https://housingsentinel.cn) 或微信小程序"房哨兵"订阅任意城市（或全国套餐）
+1. **登录**：在 [housingsentinel.cn](https://housingsentinel.cn) 或微信小程序"房哨兵"登录（想解锁全部 12 城可订阅任意城市或全国套餐；不订阅也有 3 天深圳免费试用）
 2. **取密钥**：登录后进入 **我的 → 接入 AI Agent**，生成 API Key（`hs_live_...`）
 3. **接入**（任选其一）：
 
@@ -161,11 +161,12 @@ curl -o .claude/skills/housing-sentinel/SKILL.md \
 
 | 项目 | 说明 |
 |---|---|
-| **数据授权** | **API 数据仅限订阅者本人使用，不得对外提供数据服务** |
+| **数据授权** | **API 数据仅限订阅者/试用者本人使用，不得对外提供数据服务** |
 | 认证 | `Authorization: Bearer hs_live_...`；密钥可在"接入 AI Agent"页随时重置（旧密钥即刻失效） |
-| 限流 | 60 次/分钟、2000 次/天（按账号计，重置密钥不重置限额） |
+| **免费试用** | 无订阅账号首次调用起 **3 天**内可查深圳；历史数据限最近 30 天；到期返回 403（`TRIAL_EXPIRED`） |
+| 限流 | 订阅 60 次/分钟、2000 次/天；试用 10 次/分钟、100 次/天（按账号计，重置密钥不重置限额） |
 | 轮询建议 | 数据每日更新一次，**建议轮询间隔 ≥ 1 小时** |
-| 权限 | 仅返回订阅中城市；订阅到期返回 403，续费即恢复 |
+| 权限 | 订阅用户返回订阅中城市；试用期仅深圳；订阅到期/试用结束返回 403，订阅或续费即恢复 |
 | 免责 | 信号为基于官方成交数据的市场时机参考，不构成投资建议 |
 
 本仓库的文档与示例代码可自由用于接入房哨兵服务；房哨兵名称、判断框架内容与数据服务的权利由 housingsentinel.cn 保留。
@@ -173,7 +174,7 @@ curl -o .claude/skills/housing-sentinel/SKILL.md \
 ## FAQ
 
 **Q：不订阅能试用吗？**
-可以先在 [housingsentinel.cn](https://housingsentinel.cn) 免费查看各城市的当日/本月成交数据，感受数据质量；API 与去化周期信号为订阅功能。
+可以。登录后生成 API Key，首次调用起 **3 天内可免费查询深圳数据**（含信号、指标序列与最近 30 天原始数据，限 10 次/分、100 次/天）。也可以在 [housingsentinel.cn](https://housingsentinel.cn) 免费查看各城市的当日/本月成交数据。订阅任一城市解锁对应城市全量数据与更高限额。
 
 **Q：密钥泄露了怎么办？**
 登录后到"我的 → 接入 AI Agent"点"重置密钥"，旧密钥立即失效，把新密钥更新到 Agent 配置即可。
@@ -191,9 +192,9 @@ curl -o .claude/skills/housing-sentinel/SKILL.md \
 
 **Housing Sentinel** provides official daily housing-transaction data and offense/defense market signals for 12 major Chinese cities (Shenzhen, Shanghai, Beijing, Guangzhou, Hangzhou, Nanjing, Suzhou, Wuxi, Chengdu, Chongqing, Dongguan, Xiamen). Signals are derived from second-hand inventory absorption cycles: **≥18 months = defense, 12–18 = watch, 8–12 = buy, <8 = strong buy**.
 
-**Getting started:** subscribe at [housingsentinel.cn](https://housingsentinel.cn) → generate an API key under **My → AI Agent** → connect via the remote MCP server (`https://api.housingsentinel.cn/mcp`, Bearer auth) or REST (`/api/v1/signals`, spec in [`openapi.yaml`](./openapi.yaml)). A ready-made [Claude Skill](./skills/housing-sentinel/SKILL.md) teaches your agent both the API and the decision framework.
+**Getting started:** log in at [housingsentinel.cn](https://housingsentinel.cn) → generate an API key under **My → AI Agent** → connect via the remote MCP server (`https://api.housingsentinel.cn/mcp`, Bearer auth) or REST (`/api/v1/signals`, spec in [`openapi.yaml`](./openapi.yaml)). New users get a **free 3-day trial of Shenzhen data** starting from the first API call — no subscription required. A ready-made [Claude Skill](./skills/housing-sentinel/SKILL.md) teaches your agent both the API and the decision framework.
 
-Data updates daily; rate limits 60 req/min & 2,000 req/day; data is licensed for the subscriber's own use only — redistribution as a data service is prohibited.
+Data updates daily; rate limits 60 req/min & 2,000 req/day for subscribers (10 req/min & 100 req/day during trial); data is licensed for the subscriber's/trial user's own use only — redistribution as a data service is prohibited.
 
 ---
 

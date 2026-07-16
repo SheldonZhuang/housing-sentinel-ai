@@ -4,9 +4,11 @@ info:
   version: "1.0"
   description: |
     中国12个主要城市官方房产成交数据与进攻/防守市场信号。
-    订阅用户在 housingsentinel.cn「我的→接入AI Agent」生成 API Key。
-    数据每日更新一次，建议轮询间隔≥1小时。限流：60次/分、2000次/天。
-    数据仅限订阅者本人使用，不得对外提供数据服务。
+    登录 housingsentinel.cn「我的→接入AI Agent」即可生成 API Key。
+    新用户免费试用：首次调用起 3 天内可查询深圳数据（限10次/分、100次/天，历史最近30天）；
+    订阅任一城市解锁对应城市全量数据与更高限额（60次/分、2000次/天）。
+    数据每日更新一次，建议轮询间隔≥1小时。
+    数据仅限订阅者/试用者本人使用，不得对外提供数据服务。
   contact:
     url: https://housingsentinel.cn
 servers:
@@ -37,7 +39,7 @@ paths:
   /cities:
     get:
       operationId: listCities
-      summary: 已订阅城市列表与阈值元数据
+      summary: 当前可访问城市列表与阈值元数据（订阅城市；试用期为深圳）
       responses:
         "200":
           description: 城市列表
@@ -47,6 +49,9 @@ paths:
                 type: object
                 properties:
                   success: { type: boolean }
+                  tier: { type: string, enum: [paid, trial], description: 当前账号层级 }
+                  trialEndsAt: { type: string, format: date-time, nullable: true, description: 试用截止时间（仅 trial 返回） }
+                  trialNote: { type: string, nullable: true, description: 试用范围与升级提示（仅 trial 返回） }
                   cities:
                     type: array
                     items:
@@ -74,7 +79,7 @@ paths:
       summary: 逐日指标时间序列（去化周期/库存/月均成交，用于趋势分析）
       parameters:
         - { $ref: "#/components/parameters/City" }
-        - { name: from, in: query, schema: { type: string, format: date }, description: 开始日期，默认 to 往前90天 }
+        - { name: from, in: query, schema: { type: string, format: date }, description: 开始日期，默认 to 往前90天；试用期最早为30天前（自动钳制） }
         - { name: to, in: query, schema: { type: string, format: date }, description: 结束日期，默认今天；跨度最长366天 }
       responses:
         "200":
@@ -191,6 +196,6 @@ components:
                   code: { type: string, example: INVALID_API_KEY }
                   message: { type: string }
     NotSubscribed:
-      description: 当前订阅不包含该城市
+      description: 无权访问该城市（试用期仅含深圳；code=CITY_NOT_SUBSCRIBED），或 3 天试用已结束（code=TRIAL_EXPIRED，订阅任一城市即恢复）
     RateLimited:
-      description: 超出限流（60次/分、2000次/天）
+      description: 超出限流（订阅 60次/分、2000次/天；试用 10次/分、100次/天）
