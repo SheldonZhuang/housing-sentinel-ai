@@ -1,0 +1,25 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "cn.housingsentinel/housing-sentinel",
+  "description": "中国12城官方房产成交数据与进攻/防守买卖信号 MCP。新用户免费试用3天（深圳）。Housing data & signals for 12 Chinese cities.",
+  "repository": {
+    "url": "https://github.com/SheldonZhuang/housing-sentinel-ai",
+    "source": "github"
+  },
+  "websiteUrl": "https://housingsentinel.cn",
+  "version": "1.1.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://api.housingsentinel.cn/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer hs_live_xxx — API Key，登录 housingsentinel.cn「我的→接入AI Agent」生成（新用户免费试用 3 天深圳数据）",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
