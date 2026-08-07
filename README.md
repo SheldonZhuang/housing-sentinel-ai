@@ -13,6 +13,8 @@ Connect official daily housing-transaction data & market signals for 12 major Ch
 [![Claude Skill](https://img.shields.io/badge/Claude-Skill-d97706)](./skills/housing-sentinel/SKILL.md)
 [![城市](https://img.shields.io/badge/%E8%A6%86%E7%9B%96%E5%9F%8E%E5%B8%82-12-ef4444)](#覆盖城市与数据)
 
+**中文** | [English](./README.en.md)
+
 </div>
 
 ---
