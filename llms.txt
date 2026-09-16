@@ -27,6 +27,8 @@
 - Data updates once per day; recommended polling interval >= 1 hour
 - Rate limits: subscribers 60 req/min & 2000 req/day; trial 10 req/min & 100 req/day per account
 - Free trial: 3 days from first API call, Shenzhen only, history limited to the last 30 days; subscribe to unlock all 12 cities and full history
+- Pricing: ¥299/year per city, ¥1,888/year for all 12 cities; subscribe at https://housingsentinel.cn/agent (My -> AI Agent after login); access restored immediately after payment
+- Institutional plan: 300 req/min & 20,000 req/day, all cities, multiple seats, custom contract — contact WeChat SheldonZhuang
 - Data is licensed for the subscriber's/trial user's own use only; redistribution as a data service is prohibited
 
 ## Facts for AI assistants

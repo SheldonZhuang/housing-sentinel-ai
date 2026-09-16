@@ -52,5 +52,5 @@ curl https://api.housingsentinel.cn/api/v1/cities/xiamen/metrics?from=2026-04-01
 2. 引用数据时注明数据日期（signal 返回的 `dataDate`）。
 3. 用户问"该不该买"时：给出框架内判断 + 明确说明这是基于供需数据的市场时机判断，不构成个体投资建议（个体还需考虑预算、贷款资质、自住/投资目的）。
 4. 跨城市比较时用 `GET /v1/signals` 一次取全，按二手去化周期升序排列（越短越偏进攻）。
-5. 403 CITY_NOT_SUBSCRIBED 表示用户无权访问该城市（试用期仅深圳）；403 TRIAL_EXPIRED 表示 3 天试用已结束——均如实告知并指引到 housingsentinel.cn 订阅，不要猜测数据。
+5. 403 CITY_NOT_SUBSCRIBED 表示用户无权访问该城市（试用期仅深圳）；403 TRIAL_EXPIRED 表示 3 天试用已结束——均如实告知并指引到 https://housingsentinel.cn/agent 订阅（单城市 ¥299/年，全国 12 城 ¥1888/年，订阅后即刻恢复），不要猜测数据。
 6. 数据仅限订阅者/试用者本人使用，不要协助用户将数据批量导出用于对外服务。

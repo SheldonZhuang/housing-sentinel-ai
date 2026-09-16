@@ -165,6 +165,8 @@ City codes are full pinyin (`xiamen`, `shenzhen`, …). Full field definitions a
 | **Data license** | **API data is for the subscriber's / trial user's own use only; providing it to third parties as a data service is prohibited** |
 | Authentication | `Authorization: Bearer hs_live_...`; reset your key anytime on the AI Agent page（接入 AI Agent） — the old key is invalidated immediately |
 | **Free trial** | Accounts without a subscription can query Shenzhen for **3 days** from the first call; history limited to the last 30 days; expiry returns 403 (`TRIAL_EXPIRED`) |
+| **Pricing** | **¥299/year** per city, **¥1,888/year** for all 12 cities; subscribe at [housingsentinel.cn/agent](https://housingsentinel.cn/agent) (My → AI Agent after login); access is restored immediately |
+| **Institutional plan** | Higher limits (300 req/min, 20,000 req/day), all cities, multiple seats, custom contract; contact WeChat `SheldonZhuang` |
 | Rate limits | Subscribers: 60 req/min, 2,000 req/day; trial: 10 req/min, 100 req/day (per account — resetting the key does not reset quotas) |
 | Polling | Data updates once per day; **recommended polling interval ≥ 1 hour** |
 | Access scope | Subscribers see their subscribed cities; trial users see Shenzhen only; expired subscriptions/trials return 403 — subscribing or renewing restores access |

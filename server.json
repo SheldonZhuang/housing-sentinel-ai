@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "cn.housingsentinel/housing-sentinel",
-  "description": "中国12城官方房产成交数据与进攻/防守买卖信号 MCP。新用户免费试用3天（深圳）。Housing data & signals for 12 Chinese cities.",
+  "description": "中国12城官方房产成交数据与进攻/防守买卖信号 MCP。新用户免费试用3天（深圳），订阅单城市¥299/年、全国¥1888/年。Housing data & signals for 12 Chinese cities; free 3-day trial, from ¥299/yr.",
   "repository": {
     "url": "https://github.com/SheldonZhuang/housing-sentinel-ai",
     "source": "github"
