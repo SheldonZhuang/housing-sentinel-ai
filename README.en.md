@@ -35,7 +35,7 @@
 
 [Housing Sentinel](https://housingsentinel.cn) is a housing-market data monitoring SaaS. Every day it automatically collects residential transaction and inventory figures **officially published** by each city's housing authority, computes inventory absorption cycles, and distills them into a four-phase market signal — **Defense / Watch / Buy / Strong Buy** — to help home buyers and investors time the market.
 
-This repository is its **AI Integration Hub**: connect the data and signals to Claude, Cursor, Coze, Dify, n8n, or any custom agent workflow via MCP, REST API, or a Claude Skill. **Free trial for new users**: log in, generate a key, and query Shenzhen data for 3 days starting from your first call; subscribing to any city unlocks full data for that city.
+This repository is its **AI Integration Hub**: connect the data and signals to Claude, Cursor, Coze, Dify, n8n, or any custom agent workflow via MCP, REST API, or a Claude Skill. **Free trial for new users**: log in, generate a key, and query all 12 cities for 3 days starting from your first call; afterwards Shenzhen’s current signal stays free forever. A credit pack (¥39 / 1,000 calls / 30 days) or a subscription unlocks everything. The public no-key endpoint `GET /api/v1/cities/{city}/card` returns any city’s latest transactions and market phase.
 
 > 📌 This repository contains public integration docs and examples only — no Housing Sentinel implementation code.
 
@@ -67,7 +67,7 @@ Cities without absorption-cycle data fall back to a monthly-volume test (bull li
 
 ## Quick Start (3 Steps)
 
-1. **Log in**: at [housingsentinel.cn](https://housingsentinel.cn) or via the WeChat mini program "房哨兵" (subscribe to a single city at ¥299/year (approx. $42) or the nationwide plan at ¥1,888/year (approx. $265) to unlock all 12 cities; without a subscription you still get a free 3-day Shenzhen trial)
+1. **Log in**: at [housingsentinel.cn](https://housingsentinel.cn) or via the WeChat mini program "房哨兵" (subscribe to a single city at ¥299/year (approx. $42) or the nationwide plan at ¥1,888/year (approx. $265) to unlock all 12 cities; without a subscription you still get a free 3-day all-city trial, then Shenzhen’s current signal for free forever; credit pack ¥39 / 1,000 calls / 30 days)
 2. **Get a key**: after logging in, go to **My → AI Agent**（我的→接入AI Agent） and generate an API key (`hs_live_...`)
 3. **Connect** (pick any option below):
 
@@ -164,12 +164,15 @@ City codes are full pinyin (`xiamen`, `shenzhen`, …). Full field definitions a
 |---|---|
 | **Data license** | **API data is for the subscriber's / trial user's own use only; providing it to third parties as a data service is prohibited** |
 | Authentication | `Authorization: Bearer hs_live_...`; reset your key anytime on the AI Agent page（接入 AI Agent） — the old key is invalidated immediately |
-| **Free trial** | Accounts without a subscription can query Shenzhen for **3 days** from the first call; history limited to the last 30 days; expiry returns 403 (`TRIAL_EXPIRED`) |
-| **Pricing** | **¥299/year** per city, **¥1,888/year** for all 12 cities; subscribe at [housingsentinel.cn/agent](https://housingsentinel.cn/agent) (My → AI Agent after login); access is restored immediately |
+| **Free trial** | Accounts without a subscription can query all 12 cities for **3 days** from the first call; history limited to the last 30 days |
+| **Free tier** | After the trial, forever: Shenzhen’s current signal (`/cities`, `/signals`, `/cities/shenzhen/signal`; MCP `list_cities` / `get_market_signal`), 10 req/min & 50 req/day; `metrics` / `history` return 403 (`FREE_TIER_LIMIT`) |
+| **Credit pack** | **¥39 for 1,000 calls, valid 30 days**, all 12 cities, history limited to the last 90 days; falls back to the free tier when used up or expired; no referral rewards |
+| **Public endpoint** | `GET /api/v1/cities/{city}/card` needs no key: latest daily transactions, month-to-date totals, second-hand absorption cycle and market phase (no inventory values), 60 s cache |
+| **Pricing** | **¥299/year** per city, **¥1,888/year** for all 12 cities (full history, 60 req/min, 2,000 req/day); subscribe or buy credits at [housingsentinel.cn/agent](https://housingsentinel.cn/agent) (My → AI Agent after login); access is granted immediately; 403/429 responses include `subscribeUrl` and `pricing` |
 | **Institutional plan** | Higher limits (300 req/min, 20,000 req/day), all cities, multiple seats, custom contract; contact WeChat `SheldonZhuang` |
-| Rate limits | Subscribers: 60 req/min, 2,000 req/day; trial: 10 req/min, 100 req/day (per account — resetting the key does not reset quotas) |
+| Rate limits | Subscribers: 60 req/min, 2,000 req/day; credit pack: 60 req/min; trial: 10 req/min, 100 req/day; free tier: 10 req/min, 50 req/day (per account — resetting the key does not reset quotas) |
 | Polling | Data updates once per day; **recommended polling interval ≥ 1 hour** |
-| Access scope | Subscribers see their subscribed cities; trial users see Shenzhen only; expired subscriptions/trials return 403 — subscribing or renewing restores access |
+| Access scope | Subscribers see their subscribed cities; trial users see all 12 cities; the free tier keeps Shenzhen’s current signal; credit packs cover all 12 cities; expired subscriptions fall back to the free tier — subscribing or buying credits restores access |
 | Disclaimer | Signals are market-timing references derived from official transaction data and do not constitute investment advice |
 
 The docs and example code in this repository are free to use for integrating with the Housing Sentinel service; rights to the Housing Sentinel name, the decision framework, and the data service are reserved by housingsentinel.cn.
@@ -177,7 +180,7 @@ The docs and example code in this repository are free to use for integrating wit
 ## FAQ
 
 **Q: Can I try it without subscribing?**
-Yes. Log in and generate an API key — you can query Shenzhen data free for **3 days from your first call** (signals, metric series, and the last 30 days of raw data, at 10 req/min / 100 req/day). You can also view each city's current-day/current-month figures free at [housingsentinel.cn](https://housingsentinel.cn). Subscribing to any city (¥299/year per city, approx. $42; nationwide plan ¥1,888/year, approx. $265) unlocks that city's full data and higher limits.
+Yes. Log in and generate an API key — you can query all 12 cities free for **3 days from your first call** (signals, metric series, and the last 30 days of raw data, at 10 req/min / 100 req/day), and Shenzhen’s current signal stays free forever afterwards. Without logging in you can call the public endpoint `GET /api/v1/cities/{city}/card`. Need more? Credit pack ¥39 / 1,000 calls / 30 days (all cities, 90-day history). You can also view each city's current-day/current-month figures free at [housingsentinel.cn](https://housingsentinel.cn). Subscribing to any city (¥299/year per city, approx. $42; nationwide plan ¥1,888/year, approx. $265) unlocks that city's full data and higher limits.
 
 **Q: What if my key leaks?**
 Log in, go to **My → AI Agent**（我的→接入AI Agent）, and click "Reset key". The old key is invalidated instantly — just update your agent config with the new one.

@@ -1,12 +1,18 @@
 openapi: 3.0.3
 info:
   title: Housing Sentinel Open API（房哨兵开放API）
-  version: "1.0"
+  version: "1.2"
   description: |
     中国12个主要城市官方房产成交数据与进攻/防守市场信号。
     登录 housingsentinel.cn「我的→接入AI Agent」即可生成 API Key。
-    新用户免费试用：首次调用起 3 天内可查询深圳数据（限10次/分、100次/天，历史最近30天）；
-    订阅任一城市解锁对应城市全量数据与更高限额（60次/分、2000次/天）；单城市 ¥299/年，全国 12 城 ¥1888/年，订阅入口 https://housingsentinel.cn/agent。机构版（300次/分、20000次/天）请联系微信 SheldonZhuang。
+    账号层级：
+    - 免费试用（trial）：首次调用起 3 天内可查询全部 12 城（限10次/分、100次/天，历史最近30天）；
+    - 免费层（free）：试用结束后永久可查深圳当前市场信号（/cities /signals /cities/shenzhen/signal，限10次/分、50次/天）；
+    - 点数包（credits）：¥39 / 1000 次 / 30 天，全部 12 城，历史最近 90 天；
+    - 订阅（paid）：单城市 ¥299/年，全国 12 城 ¥1888/年，全量数据与历史，60次/分、2000次/天；
+    - 机构版（institution）：300次/分、20000次/天，请联系微信 SheldonZhuang。
+    订阅/购买入口 https://housingsentinel.cn/agent，付款后即刻生效。
+    公开端点 GET /cities/{city}/card 无需 API Key，返回当日成交与市场档位（不含库存原值）。
     数据每日更新一次，建议轮询间隔≥1小时。
     数据仅限订阅者/试用者本人使用，不得对外提供数据服务。
   contact:
@@ -16,11 +22,28 @@ servers:
 security:
   - bearerAuth: []
 paths:
+  /cities/{city}/card:
+    get:
+      operationId: getCityCard
+      summary: 公开·当日成交与市场档位（无需 API Key）
+      description: 免鉴权"试吃口"：返回该城市最新一日一手/二手成交、当月累计、月度参考成交、二手去化周期与市场阶段；不含库存原值。响应带 subscribeUrl 指向解锁全量数据的入口。60 秒缓存。
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/City"
+      responses:
+        "200":
+          description: 数据卡载荷
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CityCard"
+        "404":
+          description: 城市不存在或暂无数据
   /signals:
     get:
       operationId: getSignals
-      summary: 获取全部已订阅城市的当前市场信号快照（主接口）
-      description: 返回每个订阅城市的市场阶段（防守/观察/进攻/快速进攻）、一手/二手库存去化周期、月均成交、库存与数据日期。
+      summary: 获取全部可访问城市的当前市场信号快照（主接口）
+      description: 返回每个可访问城市的市场阶段（防守/观察/进攻/快速进攻）、一手/二手库存去化周期、月均成交、库存与数据日期。试用期为全部 12 城；免费层为深圳；订阅为订阅城市。
       responses:
         "200":
           description: 信号列表
@@ -29,17 +52,41 @@ paths:
               schema:
                 type: object
                 properties:
-                  success: { type: boolean }
-                  generatedAt: { type: string, format: date-time }
+                  success:
+                    type: boolean
+                  generatedAt:
+                    type: string
+                    format: date-time
+                  tier:
+                    $ref: "#/components/schemas/Tier"
+                  scope:
+                    type: string
+                    enum:
+                      - full
+                      - signal
+                    description: signal=仅信号端点可用（free/public-demo）
+                  tierNote:
+                    type: string
+                    nullable: true
+                    description: 当前层级范围与升级提示
+                  subscribeUrl:
+                    type: string
+                    nullable: true
+                  pricing:
+                    type: string
+                    nullable: true
                   cities:
                     type: array
-                    items: { $ref: "#/components/schemas/CitySignal" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "429": { $ref: "#/components/responses/RateLimited" }
+                    items:
+                      $ref: "#/components/schemas/CitySignal"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /cities:
     get:
       operationId: listCities
-      summary: 当前可访问城市列表与阈值元数据（订阅城市；试用期为深圳）
+      summary: 当前可访问城市列表与阈值元数据
       responses:
         "200":
           description: 城市列表
@@ -48,39 +95,89 @@ paths:
               schema:
                 type: object
                 properties:
-                  success: { type: boolean }
-                  tier: { type: string, enum: [paid, trial], description: 当前账号层级 }
-                  trialEndsAt: { type: string, format: date-time, nullable: true, description: 试用截止时间（仅 trial 返回） }
-                  trialNote: { type: string, nullable: true, description: 试用范围与升级提示（仅 trial 返回） }
+                  success:
+                    type: boolean
+                  tier:
+                    $ref: "#/components/schemas/Tier"
+                  scope:
+                    type: string
+                    enum:
+                      - full
+                      - signal
+                  trialEndsAt:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: 试用截止时间（trial/free 返回）
+                  credits:
+                    type: object
+                    nullable: true
+                    description: 点数包余量（credits 层返回）
+                    properties:
+                      remaining:
+                        type: integer
+                      expiresAt:
+                        type: string
+                        format: date-time
+                  tierNote:
+                    type: string
+                    nullable: true
+                    description: 当前层级范围与升级提示
+                  subscribeUrl:
+                    type: string
+                    nullable: true
+                  pricing:
+                    type: string
+                    nullable: true
                   cities:
                     type: array
                     items:
                       type: object
                       properties:
-                        cityCode: { type: string, example: xiamen }
-                        city: { type: string, example: 厦门 }
-                        thresholds: { $ref: "#/components/schemas/Thresholds" }
+                        cityCode:
+                          type: string
+                          example: xiamen
+                        city:
+                          type: string
+                          example: 厦门
+                        thresholds:
+                          $ref: "#/components/schemas/Thresholds"
   /cities/{city}/signal:
     get:
       operationId: getCitySignal
       summary: 单城市当前市场信号
-      parameters: [ { $ref: "#/components/parameters/City" } ]
+      parameters:
+        - $ref: "#/components/parameters/City"
       responses:
         "200":
           description: 城市信号
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/CitySignal" }
-        "403": { $ref: "#/components/responses/NotSubscribed" }
-        "404": { description: 城市不存在或暂无数据 }
+              schema:
+                $ref: "#/components/schemas/CitySignal"
+        "403":
+          $ref: "#/components/responses/NotSubscribed"
+        "404":
+          description: 城市不存在或暂无数据
   /cities/{city}/metrics:
     get:
       operationId: getCityMetrics
       summary: 逐日指标时间序列（去化周期/库存/月均成交，用于趋势分析）
+      description: 需要 full scope（试用/点数包/订阅）。免费层与公共演示密钥返回 403 FREE_TIER_LIMIT。
       parameters:
-        - { $ref: "#/components/parameters/City" }
-        - { name: from, in: query, schema: { type: string, format: date }, description: 开始日期，默认 to 往前90天；试用期最早为30天前（自动钳制） }
-        - { name: to, in: query, schema: { type: string, format: date }, description: 结束日期，默认今天；跨度最长366天 }
+        - $ref: "#/components/parameters/City"
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+          description: 开始日期，默认 to 往前90天；试用期最早为30天前、点数包最早为90天前（自动钳制）
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+          description: 结束日期，默认今天；跨度最长366天
       responses:
         "200":
           description: 指标序列
@@ -89,29 +186,57 @@ paths:
               schema:
                 type: object
                 properties:
-                  success: { type: boolean }
-                  cityCode: { type: string }
+                  success:
+                    type: boolean
+                  cityCode:
+                    type: string
                   metrics:
                     type: array
                     items:
                       type: object
                       properties:
-                        date: { type: string, format: date }
-                        firstHandCycle: { type: number, nullable: true, description: 一手去化周期（月） }
-                        secondHandCycle: { type: number, nullable: true, description: 二手去化周期（月） }
-                        firstHandInventory: { type: integer, nullable: true }
-                        secondHandInventory: { type: integer, nullable: true }
-                        firstHandAvgMonthly: { type: integer, nullable: true }
-                        secondHandAvgMonthly: { type: integer, nullable: true }
-        "403": { $ref: "#/components/responses/NotSubscribed" }
+                        date:
+                          type: string
+                          format: date
+                        firstHandCycle:
+                          type: number
+                          nullable: true
+                          description: 一手去化周期（月）
+                        secondHandCycle:
+                          type: number
+                          nullable: true
+                          description: 二手去化周期（月）
+                        firstHandInventory:
+                          type: integer
+                          nullable: true
+                        secondHandInventory:
+                          type: integer
+                          nullable: true
+                        firstHandAvgMonthly:
+                          type: integer
+                          nullable: true
+                        secondHandAvgMonthly:
+                          type: integer
+                          nullable: true
+        "403":
+          $ref: "#/components/responses/NotSubscribed"
   /cities/{city}/history:
     get:
       operationId: getCityHistory
       summary: 原始日度成交/库存数据（单次最多400条）
+      description: 需要 full scope（试用/点数包/订阅）。免费层与公共演示密钥返回 403 FREE_TIER_LIMIT。
       parameters:
-        - { $ref: "#/components/parameters/City" }
-        - { name: from, in: query, schema: { type: string, format: date } }
-        - { name: to, in: query, schema: { type: string, format: date } }
+        - $ref: "#/components/parameters/City"
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
       responses:
         "200":
           description: 原始数据
@@ -120,20 +245,40 @@ paths:
               schema:
                 type: object
                 properties:
-                  success: { type: boolean }
-                  count: { type: integer }
+                  success:
+                    type: boolean
+                  count:
+                    type: integer
                   data:
                     type: array
                     items:
                       type: object
                       properties:
-                        date: { type: string, format: date }
-                        firstHandSubscription: { type: integer, nullable: true, description: 一手认购套数 }
-                        firstHandTransaction: { type: integer, nullable: true, description: 一手网签成交套数 }
-                        firstHandInventory: { type: integer, nullable: true, description: 一手库存套数 }
-                        secondHandTransaction: { type: integer, nullable: true, description: 二手网签成交套数 }
-                        secondHandInventory: { type: integer, nullable: true, description: 二手库存套数 }
-        "403": { $ref: "#/components/responses/NotSubscribed" }
+                        date:
+                          type: string
+                          format: date
+                        firstHandSubscription:
+                          type: integer
+                          nullable: true
+                          description: 一手认购套数
+                        firstHandTransaction:
+                          type: integer
+                          nullable: true
+                          description: 一手网签成交套数
+                        firstHandInventory:
+                          type: integer
+                          nullable: true
+                          description: 一手库存套数
+                        secondHandTransaction:
+                          type: integer
+                          nullable: true
+                          description: 二手网签成交套数
+                        secondHandInventory:
+                          type: integer
+                          nullable: true
+                          description: 二手库存套数
+        "403":
+          $ref: "#/components/responses/NotSubscribed"
 components:
   securitySchemes:
     bearerAuth:
@@ -147,40 +292,208 @@ components:
       required: true
       schema:
         type: string
-        enum: [shenzhen, shanghai, beijing, guangzhou, hangzhou, nanjing, suzhou, wuxi, chengdu, chongqing, dongguan, xiamen]
+        enum:
+          - shenzhen
+          - shanghai
+          - beijing
+          - guangzhou
+          - hangzhou
+          - nanjing
+          - suzhou
+          - wuxi
+          - chengdu
+          - chongqing
+          - dongguan
+          - xiamen
       description: 城市代码（拼音全拼）
   schemas:
+    Tier:
+      type: string
+      enum:
+        - institution
+        - paid
+        - credits
+        - trial
+        - free
+        - public-demo
+      description: 账号层级：institution 机构版 / paid 订阅 / credits 点数包 / trial 3天试用（全12城）/ free 免费层（深圳信号永久）/ public-demo 公共演示密钥
     Thresholds:
       type: object
       properties:
-        cycleDefense: { type: number, example: 18, description: 防守期阈值（月） }
-        cycleWatch: { type: number, example: 12, description: 观察期阈值（月） }
-        cycleBuy: { type: number, example: 8, description: 进攻期阈值（月） }
-        monthlyBullLine: { type: integer, description: 月成交荣枯线（套） }
-        monthlyBoomLine: { type: integer, description: 月成交暴涨线（套） }
+        cycleDefense:
+          type: number
+          example: 18
+          description: 防守期阈值（月）
+        cycleWatch:
+          type: number
+          example: 12
+          description: 观察期阈值（月）
+        cycleBuy:
+          type: number
+          example: 8
+          description: 进攻期阈值（月）
+        monthlyBullLine:
+          type: integer
+          description: 月成交荣枯线（套）
+        monthlyBoomLine:
+          type: integer
+          description: 月成交暴涨线（套）
     HandStats:
       type: object
       properties:
-        inventoryCycle: { type: number, nullable: true, description: 库存去化周期（月）；成都/重庆一手恒为null }
-        inventory: { type: integer, nullable: true, description: 库存套数 }
-        avgMonthly: { type: integer, nullable: true, description: 月均成交套数 }
-        monthTotal: { type: integer, description: 当月累计成交套数 }
-        refYearMonth: { type: string, nullable: true, description: 月均成交参考月份 }
-        isMonthlySnapshot: { type: boolean, description: true=月均来自月度快照而非当月日报投影 }
+        inventoryCycle:
+          type: number
+          nullable: true
+          description: 库存去化周期（月）；成都/重庆一手恒为null
+        inventory:
+          type: integer
+          nullable: true
+          description: 库存套数
+        avgMonthly:
+          type: integer
+          nullable: true
+          description: 月均成交套数
+        monthTotal:
+          type: integer
+          description: 当月累计成交套数
+        refYearMonth:
+          type: string
+          nullable: true
+          description: 月均成交参考月份
+        isMonthlySnapshot:
+          type: boolean
+          description: true=月均来自月度快照而非当月日报投影
     CitySignal:
       type: object
       properties:
-        cityCode: { type: string, example: xiamen }
-        city: { type: string, example: 厦门 }
-        dataDate: { type: string, format: date, description: 数据截止日期 }
+        cityCode:
+          type: string
+          example: xiamen
+        city:
+          type: string
+          example: 厦门
+        dataDate:
+          type: string
+          format: date
+          description: 数据截止日期
         phase:
           type: string
           description: 市场阶段
-          enum: [防守期, 观察期, 进攻/买入期, 快速进攻/买入期, 突破荣枯线, 突破景气线, 突破暴涨线, 数据不足]
-        phaseSource: { type: string, enum: [cycle, volume, none], description: 判定依据（去化周期/成交量/数据不足） }
-        firstHand: { $ref: "#/components/schemas/HandStats" }
-        secondHand: { $ref: "#/components/schemas/HandStats" }
-        thresholds: { $ref: "#/components/schemas/Thresholds" }
+          enum:
+            - 防守期
+            - 观察期
+            - 进攻/买入期
+            - 快速进攻/买入期
+            - 突破荣枯线
+            - 突破景气线
+            - 突破暴涨线
+            - 数据不足
+        phaseSource:
+          type: string
+          enum:
+            - cycle
+            - volume
+            - none
+          description: 判定依据（去化周期/成交量/数据不足）
+        firstHand:
+          $ref: "#/components/schemas/HandStats"
+        secondHand:
+          $ref: "#/components/schemas/HandStats"
+        thresholds:
+          $ref: "#/components/schemas/Thresholds"
+    CityCard:
+      type: object
+      description: 公开数据卡载荷（不含库存原值）
+      properties:
+        success:
+          type: boolean
+        cityCode:
+          type: string
+        city:
+          type: string
+        firstHandPeriod:
+          type: string
+          enum:
+            - daily
+            - monthly
+          description: 成都/重庆为 monthly（一手仅月末记录）
+        date:
+          type: string
+          format: date
+          description: 最新数据日期
+        firstHandSubscription:
+          type: integer
+          nullable: true
+        firstHandTransaction:
+          type: integer
+          nullable: true
+        secondHandTransaction:
+          type: integer
+          nullable: true
+        prev:
+          type: object
+          nullable: true
+          properties:
+            date:
+              type: string
+              format: date
+            firstHandTransaction:
+              type: integer
+              nullable: true
+            secondHandTransaction:
+              type: integer
+              nullable: true
+        month:
+          type: object
+          properties:
+            yearMonth:
+              type: string
+              example: 2026-09
+            passedDays:
+              type: integer
+              nullable: true
+            totalDaysInMonth:
+              type: integer
+              nullable: true
+            firstHandTotal:
+              type: integer
+              nullable: true
+            secondHandTotal:
+              type: integer
+              nullable: true
+        secondHandRef:
+          type: object
+          properties:
+            value:
+              type: integer
+              nullable: true
+              description: 二手月度参考成交（月均）
+            refYearMonth:
+              type: string
+              nullable: true
+            isSnapshot:
+              type: boolean
+        secondHandCycle:
+          type: number
+          nullable: true
+          description: 二手去化周期（月）
+        phase:
+          type: string
+        phaseSource:
+          type: string
+          enum:
+            - cycle
+            - volume
+            - none
+        thresholds:
+          $ref: "#/components/schemas/Thresholds"
+        subscribeUrl:
+          type: string
+        docs:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
   responses:
     Unauthorized:
       description: API Key 缺失或无效
@@ -189,13 +502,41 @@ components:
           schema:
             type: object
             properties:
-              success: { type: boolean, example: false }
+              success:
+                type: boolean
+                example: false
               error:
                 type: object
                 properties:
-                  code: { type: string, example: INVALID_API_KEY }
-                  message: { type: string }
+                  code:
+                    type: string
+                    example: INVALID_API_KEY
+                  message:
+                    type: string
     NotSubscribed:
-      description: 无权访问该城市（试用期仅含深圳；code=CITY_NOT_SUBSCRIBED），或 3 天试用已结束（code=TRIAL_EXPIRED，订阅任一城市即恢复）
+      description: 无权访问（code=CITY_NOT_SUBSCRIBED 城市不在当前层级；code=FREE_TIER_LIMIT 免费层/演示密钥不可用 metrics/history）。响应 error 附 subscribeUrl 与 pricing。
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    enum:
+                      - CITY_NOT_SUBSCRIBED
+                      - FREE_TIER_LIMIT
+                  message:
+                    type: string
+                  subscribeUrl:
+                    type: string
+                    example: https://housingsentinel.cn/agent
+                  pricing:
+                    type: string
     RateLimited:
-      description: 超出限流（订阅 60次/分、2000次/天；试用 10次/分、100次/天）
+      description: 超出限流（订阅 60次/分、2000次/天；点数包 60次/分；试用 10次/分、100次/天；免费层 10次/分、50次/天）。响应 error 附 subscribeUrl 与 pricing。
