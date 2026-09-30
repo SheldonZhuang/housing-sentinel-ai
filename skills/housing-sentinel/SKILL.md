@@ -37,6 +37,7 @@ description: 中国12城房产投资进攻/防守判断。当用户问"某城市
 - `get_metrics(city, from, to)` — 逐日指标序列（做趋势判断，默认近90天）
 - `get_history(city, from, to)` — 原始日度数据（深度分析）
 - `list_cities()` — 可访问城市与各城阈值
+- Prompts：`daily_brief(cities?)` 每日简报、`compare_cities(cities)` 城市对比；Resources：`housing://thresholds` 各城判档阈值、`housing://llms.txt` 接入说明
 
 **仅 REST 时**：
 
@@ -46,6 +47,8 @@ curl https://api.housingsentinel.cn/api/v1/cities/xiamen/metrics?from=2026-04-01
 ```
 
 城市代码用拼音全拼（xiamen、shenzhen、beijing…）。
+
+定时/重复查询时用 `/signals?since=<上次 nextSince>` 只取有变动的城市（`changedSince` 为空即无新数据，可带 If-None-Match 得 304）；需要主动推送时让用户注册 Webhook（`POST /api/v1/webhooks`，试用/点数包/订阅可用），不要为等新数据高频轮询。
 
 ## 回答规范
 

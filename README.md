@@ -29,6 +29,10 @@ Connect official daily housing-transaction data & market signals for 12 major Ch
   - [方式 B：REST API](#方式-brest-api任意语言--n8n--扣子--dify)
   - [方式 C：Claude Skill](#方式-cclaude-skill方法论--工具一键安装)
 - [API 一览](#api-一览)
+- [变化驱动：since / ETag 与 Webhook](#变化驱动since--etag-与-webhook)
+- [MCP Prompts 与 Resources](#mcp-prompts-与-resources)
+- [npm stdio 包](#npm-stdio-包)
+- [接入配方 recipes/](#接入配方-recipes)
 - [示例与模板](#示例与模板)
 - [使用规则与限制](#使用规则与限制)
 - [FAQ](#faq)
@@ -136,6 +140,7 @@ curl -o .claude/skills/housing-sentinel/SKILL.md \
 | `GET /api/v1/cities/{city}/metrics?from=&to=` | 逐日指标时间序列（趋势分析，默认近90天） |
 | `GET /api/v1/cities/{city}/history?from=&to=` | 原始日度成交/库存数据（单次最多400条） |
 | `GET /api/v1/cities` | 已订阅城市列表 + 阈值元数据 |
+| `POST/GET /api/v1/webhooks`、`DELETE /api/v1/webhooks/{id}`、`POST /api/v1/webhooks/{id}/test` | Webhook 管理（试用/点数包/订阅/机构版） |
 
 城市代码用拼音全拼（`xiamen`、`shenzhen`…）。完整字段定义见 [`openapi.yaml`](./openapi.yaml)。
 
@@ -150,6 +155,61 @@ curl -o .claude/skills/housing-sentinel/SKILL.md \
   "thresholds": { "cycleDefense": 18, "cycleWatch": 12, "cycleBuy": 8 }
 }
 ```
+
+## 变化驱动：since / ETag 与 Webhook
+
+数据每天更新一次，没必要每次都解析全量。
+
+**轮询**（所有层级可用）：首次调 `GET /api/v1/signals`，之后带上次响应的 `nextSince`：
+
+```bash
+curl "https://api.housingsentinel.cn/api/v1/signals?since=2026-09-30T00:00:00.000Z" \
+  -H "Authorization: Bearer hs_live_xxx" -H 'If-None-Match: W/"上次的ETag"'
+```
+
+- 带 `since` 时只返回该时间后有数据变动的城市，响应多出 `since`、`changedSince`（变动城市代码数组）、`nextSince`（下次用）；每个城市对象带 `updatedAt`。非法 since 返回 400 `BAD_SINCE`。
+- `/signals` 与 `/cities/{city}/signal` 返回弱 `ETag`，带 `If-None-Match` 且没变化时返回 **304**。
+- 完整脚本：[recipes/polling-etag.sh](./recipes/polling-etag.sh)、[recipes/n8n-signals-since.json](./recipes/n8n-signals-since.json)。
+
+**Webhook**（试用/点数包/订阅/机构版；免费层与演示密钥返回 403）：
+
+```bash
+curl -X POST https://api.housingsentinel.cn/api/v1/webhooks \
+  -H "Authorization: Bearer hs_live_xxx" -H "Content-Type: application/json" \
+  -d '{"url":"https://your.domain/hs-webhook","cities":["shenzhen"],"events":["data.updated","phase.changed"]}'
+# → 201，响应里的 secret（whsec_...）只返回这一次
+```
+
+- 事件：`data.updated`（城市有新数据）、`phase.changed`（市场阶段变化，额外带 `previousPhase`/`phase`）；服务端每 5 分钟检测一次。
+- 请求体 `{ id, event, createdAt, cityCode, signal }`，`signal` 与 `/cities/{city}/signal` 响应相同。
+- 请求头 `X-HS-Event`、`X-HS-Delivery`、`X-HS-Signature: t=<unix秒>,v1=<hex>`，**`v1 = HMAC-SHA256(secret, "<t>.<原始请求体>")`**。
+- 要求：url 必须 https（拒绝内网/回环地址）；5 秒内返回 2xx，不跟随重定向；连续失败 10 次自动停用（`POST /webhooks/{id}/test` 成功可重新激活）；每账号最多 5 个；订阅/试用过期后停推。
+- 验签示例：[Node.js](./recipes/webhook-receiver-node.js) / [Python](./recipes/webhook-receiver-python.py)。
+
+## MCP Prompts 与 Resources
+
+MCP server 1.3.0 在 4 个工具之外提供：
+
+| 类型 | 名称 | 说明 |
+|---|---|---|
+| Prompt | `daily_brief` | 每日房市简报；参数 `cities` 可选，逗号分隔 |
+| Prompt | `compare_cities` | 多城市对比；参数 `cities` |
+| Resource | `housing://llms.txt` | 接入说明（与 [llms.txt](./llms.txt) 相同） |
+| Resource | `housing://thresholds` | 各城市判档阈值（JSON） |
+
+## npm stdio 包
+
+只支持 stdio 的 MCP 客户端可以用 [`housing-sentinel-mcp`](./packages/housing-sentinel-mcp)，它把 stdio 消息原样转发到远程 MCP：
+
+```json
+{ "mcpServers": { "housing-sentinel": { "command": "npx", "args": ["-y", "housing-sentinel-mcp"], "env": { "HOUSING_SENTINEL_API_KEY": "hs_live_xxx" } } } }
+```
+
+中国大陆网络可在 env 中加 `"HOUSING_SENTINEL_URL": "https://housingpi-proxy-anirmyfaea.cn-shanghai.fcapp.run/mcp"`。
+
+## 接入配方 recipes/
+
+[`recipes/`](./recipes) 里每个文件都可以直接复制：Claude Code 每日 08:00 简报、Claude Desktop/Cursor 配置、n8n since+ETag 轮询、扣子工作流、Dify OpenAPI 导入、OpenAI Agents SDK、Webhook 验签（Node/Python）、curl 轮询脚本。
 
 ## 示例与模板
 
@@ -199,7 +259,7 @@ curl -o .claude/skills/housing-sentinel/SKILL.md \
 
 **Housing Sentinel** provides official daily housing-transaction data and offense/defense market signals for 12 major Chinese cities (Shenzhen, Shanghai, Beijing, Guangzhou, Hangzhou, Nanjing, Suzhou, Wuxi, Chengdu, Chongqing, Dongguan, Xiamen). Signals are derived from second-hand inventory absorption cycles: **≥18 months = defense, 12–18 = watch, 8–12 = buy, <8 = strong buy**.
 
-**Getting started:** log in at [housingsentinel.cn](https://housingsentinel.cn) → generate an API key under **My → AI Agent** → connect via the remote MCP server (`https://api.housingsentinel.cn/mcp`, Bearer auth) or REST (`/api/v1/signals`, spec in [`openapi.yaml`](./openapi.yaml)). New users get a **free 3-day trial of all 12 cities** starting from the first API call, and Shenzhen’s current signal stays free forever afterwards — no subscription required. A public no-key endpoint `GET /api/v1/cities/{city}/card` returns any city’s latest transactions and market phase. A ready-made [Claude Skill](./skills/housing-sentinel/SKILL.md) teaches your agent both the API and the decision framework.
+**Getting started:** log in at [housingsentinel.cn](https://housingsentinel.cn) → generate an API key under **My → AI Agent** → connect via the remote MCP server (`https://api.housingsentinel.cn/mcp`, Bearer auth; or `npx -y housing-sentinel-mcp` for stdio clients) or REST (`/api/v1/signals`, spec in [`openapi.yaml`](./openapi.yaml)). New users get a **free 3-day trial of all 12 cities** starting from the first API call, and Shenzhen’s current signal stays free forever afterwards — no subscription required. A public no-key endpoint `GET /api/v1/cities/{city}/card` returns any city’s latest transactions and market phase. A ready-made [Claude Skill](./skills/housing-sentinel/SKILL.md) teaches your agent both the API and the decision framework. Change-driven access: `/signals?since=` + ETag/304, and HMAC-signed webhooks (`data.updated` / `phase.changed`). Copy-paste integrations live in [`recipes/`](./recipes).
 
 Data updates daily; rate limits 60 req/min & 2,000 req/day for subscribers (credit pack ¥39 / 1,000 calls / 30 days; 10 req/min & 100 req/day during trial; 10 req/min & 50 req/day on the free tier); data is licensed for the subscriber's/trial user's own use only — redistribution as a data service is prohibited.
 

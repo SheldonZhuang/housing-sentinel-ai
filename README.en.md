@@ -27,6 +27,10 @@
   - [Option B: REST API (any language / n8n / Coze / Dify)](#option-b-rest-api-any-language--n8n--coze--dify)
   - [Option C: Claude Skill (methodology + tools, one-command install)](#option-c-claude-skill-methodology--tools-one-command-install)
 - [API Overview](#api-overview)
+- [Change-Driven Access: since / ETag & Webhooks](#change-driven-access-since--etag--webhooks)
+- [MCP Prompts & Resources](#mcp-prompts--resources)
+- [npm stdio Package](#npm-stdio-package)
+- [Recipes](#recipes)
 - [Examples & Templates](#examples--templates)
 - [Usage Rules & Limits](#usage-rules--limits)
 - [FAQ](#faq)
@@ -133,6 +137,7 @@ curl -o .claude/skills/housing-sentinel/SKILL.md \
 | `GET /api/v1/cities/{city}/metrics?from=&to=` | Daily indicator time series (for trend analysis; defaults to the last 90 days) |
 | `GET /api/v1/cities/{city}/history?from=&to=` | Raw daily transaction/inventory data (up to 400 records per request) |
 | `GET /api/v1/cities` | List of subscribed cities + threshold metadata |
+| `POST/GET /api/v1/webhooks`, `DELETE /api/v1/webhooks/{id}`, `POST /api/v1/webhooks/{id}/test` | Webhook management (trial / credits / subscription / institution) |
 
 City codes are full pinyin (`xiamen`, `shenzhen`, …). Full field definitions are in [`openapi.yaml`](./openapi.yaml).
 
@@ -149,6 +154,59 @@ City codes are full pinyin (`xiamen`, `shenzhen`, …). Full field definitions a
 ```
 
 > Note: `phase` values are returned in Chinese — e.g. `防守期` (Defense), `观察期` (Watch), `进攻/买入期` (Buy), `快速进攻/买入期` (Strong Buy). Use `phaseSource` and the numeric fields for language-independent logic.
+
+## Change-Driven Access: since / ETag & Webhooks
+
+Data updates once a day, so there is no need to re-parse the full snapshot every time.
+
+**Polling** (all tiers): call `GET /api/v1/signals` once, then pass the previous response's `nextSince`:
+
+```bash
+curl "https://api.housingsentinel.cn/api/v1/signals?since=2026-09-30T00:00:00.000Z" \
+  -H "Authorization: Bearer hs_live_xxx" -H 'If-None-Match: W/"previous-etag"'
+```
+
+- With `since`, only cities whose data changed after that time are returned. The response adds `since`, `changedSince` (array of changed city codes) and `nextSince`, and every city object carries `updatedAt`. An invalid since returns 400 `BAD_SINCE`.
+- `/signals` and `/cities/{city}/signal` return a weak `ETag`. Send `If-None-Match` to get **304** when nothing changed.
+- Full scripts: [recipes/polling-etag.sh](./recipes/polling-etag.sh), [recipes/n8n-signals-since.json](./recipes/n8n-signals-since.json).
+
+**Webhooks** (trial / credits / subscription / institution; free tier and demo keys get 403):
+
+```bash
+curl -X POST https://api.housingsentinel.cn/api/v1/webhooks \
+  -H "Authorization: Bearer hs_live_xxx" -H "Content-Type: application/json" \
+  -d '{"url":"https://your.domain/hs-webhook","cities":["shenzhen"],"events":["data.updated","phase.changed"]}'
+# → 201; the secret (whsec_...) is returned only once
+```
+
+- Events: `data.updated` (new data for a city) and `phase.changed` (market phase changed; adds `previousPhase`/`phase`). The server checks every 5 minutes.
+- Body `{ id, event, createdAt, cityCode, signal }`; `signal` has the same shape as the `/cities/{city}/signal` response.
+- Headers `X-HS-Event`, `X-HS-Delivery`, `X-HS-Signature: t=<unix seconds>,v1=<hex>` with **`v1 = HMAC-SHA256(secret, "<t>.<raw body>")`**.
+- Rules: https only (private/loopback addresses rejected); reply 2xx within 5 s, redirects are not followed; 10 consecutive failures disable the hook (a successful `POST /webhooks/{id}/test` re-enables it); max 5 per account; pushes stop when the subscription/trial ends.
+- Verification samples: [Node.js](./recipes/webhook-receiver-node.js) / [Python](./recipes/webhook-receiver-python.py).
+
+## MCP Prompts & Resources
+
+MCP server 1.3.0 also exposes the following alongside its 4 tools:
+
+| Type | Name | Description |
+|---|---|---|
+| Prompt | `daily_brief` | Daily housing brief; optional `cities`, comma-separated |
+| Prompt | `compare_cities` | Compare cities; argument `cities` |
+| Resource | `housing://llms.txt` | Integration notes (same as [llms.txt](./llms.txt)) |
+| Resource | `housing://thresholds` | Per-city phase thresholds (JSON) |
+
+## npm stdio Package
+
+Clients that only support stdio servers can use [`housing-sentinel-mcp`](./packages/housing-sentinel-mcp). It relays stdio messages unchanged to the remote MCP server:
+
+```json
+{ "mcpServers": { "housing-sentinel": { "command": "npx", "args": ["-y", "housing-sentinel-mcp"], "env": { "HOUSING_SENTINEL_API_KEY": "hs_live_xxx" } } } }
+```
+
+## Recipes
+
+Every file in [`recipes/`](./recipes) is copy-paste ready: Claude Code daily 08:00 brief, Claude Desktop/Cursor config, n8n since+ETag polling, Coze workflow, Dify OpenAPI import, OpenAI Agents SDK, webhook verification (Node/Python), and a curl polling script.
 
 ## Examples & Templates
 

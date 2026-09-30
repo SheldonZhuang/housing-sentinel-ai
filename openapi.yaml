@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Housing Sentinel Open API（房哨兵开放API）
-  version: "1.2"
+  version: "1.3"
   description: |
     中国12个主要城市官方房产成交数据与进攻/防守市场信号。
     登录 housingsentinel.cn「我的→接入AI Agent」即可生成 API Key。
@@ -13,7 +13,8 @@ info:
     - 机构版（institution）：300次/分、20000次/天，请联系微信 SheldonZhuang。
     订阅/购买入口 https://housingsentinel.cn/agent，付款后即刻生效。
     公开端点 GET /cities/{city}/card 无需 API Key，返回当日成交与市场档位（不含库存原值）。
-    数据每日更新一次，建议轮询间隔≥1小时。
+    数据每日更新一次，建议轮询间隔≥1小时。变化驱动：/signals?since=<上次 nextSince> 只返回有变动的城市；/signals 与 /cities/{city}/signal 返回弱 ETag，带 If-None-Match 未变化时 304。
+    Webhook（试用/点数包/订阅/机构版）：POST /webhooks 注册 https 地址，城市有新数据（data.updated）或市场阶段变化（phase.changed）时服务端主动推送，签名见 createWebhook 的 callbacks。
     数据仅限订阅者/试用者本人使用，不得对外提供数据服务。
   contact:
     url: https://housingsentinel.cn
@@ -43,10 +44,23 @@ paths:
     get:
       operationId: getSignals
       summary: 获取全部可访问城市的当前市场信号快照（主接口）
-      description: 返回每个可访问城市的市场阶段（防守/观察/进攻/快速进攻）、一手/二手库存去化周期、月均成交、库存与数据日期。试用期为全部 12 城；免费层为深圳；订阅为订阅城市。
+      description: >-
+        返回每个可访问城市的市场阶段（防守/观察/进攻/快速进攻）、一手/二手库存去化周期、月均成交、库存与数据日期。试用期为全部 12 城；免费层为深圳；订阅为订阅城市。变化驱动轮询：首次不带 since，之后带上次响应的 nextSince，只返回该时间后有数据变动的城市；同时保存响应头 ETag，下次带 If-None-Match，未变化返回 304（304
+        同样计入调用次数，但无需解析响应体）。
+      parameters:
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: ISO 8601 时间（取上次响应的 nextSince）；只返回 updatedAt 晚于该时间的城市。非法值返回 400 BAD_SINCE
+        - $ref: "#/components/parameters/IfNoneMatch"
       responses:
         "200":
           description: 信号列表
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
           content:
             application/json:
               schema:
@@ -75,10 +89,27 @@ paths:
                   pricing:
                     type: string
                     nullable: true
+                  since:
+                    type: string
+                    format: date-time
+                    description: 仅带 since 时返回：规范化后的 since
+                  changedSince:
+                    type: array
+                    items:
+                      type: string
+                    description: 仅带 since 时返回：since 之后有数据变动的城市代码（为空表示无变化）
+                  nextSince:
+                    type: string
+                    format: date-time
+                    description: 仅带 since 时返回：下次轮询应传入的 since（无变动时等于 since）
                   cities:
                     type: array
                     items:
                       $ref: "#/components/schemas/CitySignal"
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "429":
@@ -146,15 +177,22 @@ paths:
     get:
       operationId: getCitySignal
       summary: 单城市当前市场信号
+      description: 返回弱 ETag；带 If-None-Match 且信号未变化时返回 304。
       parameters:
         - $ref: "#/components/parameters/City"
+        - $ref: "#/components/parameters/IfNoneMatch"
       responses:
         "200":
           description: 城市信号
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/CitySignal"
+        "304":
+          $ref: "#/components/responses/NotModified"
         "403":
           $ref: "#/components/responses/NotSubscribed"
         "404":
@@ -279,6 +317,161 @@ paths:
                           description: 二手库存套数
         "403":
           $ref: "#/components/responses/NotSubscribed"
+  /webhooks:
+    post:
+      operationId: createWebhook
+      summary: 注册 Webhook（数据更新/阶段变化时主动推送）
+      description: >-
+        需要 full scope（机构版/订阅/点数包/试用）；免费层与公共演示密钥返回 403 FREE_TIER_LIMIT。url 必须为 https，禁止内网/回环/链路本地地址与带账号密码的 URL。每账号最多 5 个。secret 仅在创建时返回一次。服务端每 5 分钟检测一次，推送需 5 秒内返回 2xx（不跟随重定向），连续失败 10 次自动停用（调用
+        /webhooks/{id}/test 成功可重新激活）；订阅/试用过期后停止推送。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  example: https://example.com/hs-webhook
+                  description: 接收地址，必须 https
+                cities:
+                  type: array
+                  items:
+                    type: string
+                  description: 城市代码数组；省略=全部可访问城市
+                events:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - data.updated
+                      - phase.changed
+                  description: 省略=两种事件都订阅
+      responses:
+        "201":
+          description: 创建成功（secret 只返回这一次）
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  webhook:
+                    $ref: "#/components/schemas/Webhook"
+                  secret:
+                    type: string
+                    example: whsec_...
+                    description: 签名密钥，仅返回一次
+                  note:
+                    type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/NotSubscribed"
+      callbacks:
+        webhookEvent:
+          "{$request.body#/url}":
+            post:
+              summary: 推送事件（服务端 → 你的 url）
+              description: "请求头：X-HS-Event（事件名）、X-HS-Delivery（事件 id）、X-HS-Signature: t=<unix秒>,v1=<hex>。验签：v1 = HMAC-SHA256(secret, `${t}.${原始请求体}`)，用原始字节而非重新序列化的 JSON，常数时间比较，并拒绝 |now - t| > 300 秒的请求防重放。"
+              parameters:
+                - name: X-HS-Event
+                  in: header
+                  required: true
+                  schema:
+                    type: string
+                    enum:
+                      - data.updated
+                      - phase.changed
+                      - ping
+                - name: X-HS-Delivery
+                  in: header
+                  required: true
+                  schema:
+                    type: string
+                    example: evt_...
+                - name: X-HS-Signature
+                  in: header
+                  required: true
+                  schema:
+                    type: string
+                    example: t=1790000000,v1=5f2c...
+              requestBody:
+                required: true
+                content:
+                  application/json:
+                    schema:
+                      $ref: "#/components/schemas/WebhookEvent"
+              responses:
+                2XX:
+                  description: 5 秒内返回任意 2xx 视为投递成功
+    get:
+      operationId: listWebhooks
+      summary: 列出本账号的 Webhook（不含 secret）
+      responses:
+        "200":
+          description: Webhook 列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  webhooks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Webhook"
+        "403":
+          $ref: "#/components/responses/NotSubscribed"
+  /webhooks/{id}:
+    delete:
+      operationId: deleteWebhook
+      summary: 删除 Webhook
+      parameters:
+        - $ref: "#/components/parameters/WebhookId"
+      responses:
+        "200":
+          description: 已删除
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        "404":
+          description: webhook 不存在（code=NOT_FOUND）
+  /webhooks/{id}/test:
+    post:
+      operationId: testWebhook
+      summary: 立即推送一次 ping 事件（成功会重新激活已停用的 Webhook）
+      parameters:
+        - $ref: "#/components/parameters/WebhookId"
+      responses:
+        "200":
+          description: 投递结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  delivered:
+                    type: boolean
+                  error:
+                    type: string
+                    description: 投递失败原因（仅失败时）
+        "404":
+          description: webhook 不存在（code=NOT_FOUND）
 components:
   securitySchemes:
     bearerAuth:
@@ -306,6 +499,25 @@ components:
           - dongguan
           - xiamen
       description: 城市代码（拼音全拼）
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      schema:
+        type: string
+      description: 上次响应的 ETag；未变化时返回 304
+    WebhookId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Webhook id
+  headers:
+    ETag:
+      description: 弱 ETag（只对业务载荷取哈希，不受 generatedAt 影响）
+      schema:
+        type: string
+        example: W/"abc123"
   schemas:
     Tier:
       type: string
@@ -401,6 +613,74 @@ components:
           $ref: "#/components/schemas/HandStats"
         thresholds:
           $ref: "#/components/schemas/Thresholds"
+        updatedAt:
+          type: string
+          nullable: true
+          description: 该城市数据最近一次变动时间（ISO 8601），与 since 比较
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: integer
+        url:
+          type: string
+        cities:
+          type: array
+          nullable: true
+          items:
+            type: string
+          description: null=全部可访问城市
+        events:
+          type: array
+          items:
+            type: string
+            enum:
+              - data.updated
+              - phase.changed
+        active:
+          type: boolean
+          description: 连续失败 10 次自动置 false
+        failureCount:
+          type: integer
+        lastSuccessAt:
+          type: string
+          nullable: true
+        lastError:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+    WebhookEvent:
+      type: object
+      description: 推送请求体。ping 事件只含 id/event/createdAt/webhookId。
+      properties:
+        id:
+          type: string
+          example: evt_...
+        event:
+          type: string
+          enum:
+            - data.updated
+            - phase.changed
+            - ping
+        createdAt:
+          type: string
+          format: date-time
+        cityCode:
+          type: string
+          example: shenzhen
+        previousPhase:
+          type: string
+          nullable: true
+          description: 仅 phase.changed：变化前阶段
+        phase:
+          type: string
+          description: 仅 phase.changed：新阶段
+        webhookId:
+          type: integer
+          description: 仅 ping
+        signal:
+          $ref: "#/components/schemas/CitySignal"
     CityCard:
       type: object
       description: 公开数据卡载荷（不含库存原值）
@@ -495,6 +775,31 @@ components:
           type: string
           format: date-time
   responses:
+    NotModified:
+      description: If-None-Match 与当前 ETag 一致，数据未变化（无响应体）
+    BadRequest:
+      description: 参数错误（BAD_SINCE / BAD_URL / BAD_CITIES / BAD_EVENTS / TOO_MANY_WEBHOOKS）
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    enum:
+                      - BAD_SINCE
+                      - BAD_URL
+                      - BAD_CITIES
+                      - BAD_EVENTS
+                      - TOO_MANY_WEBHOOKS
+                  message:
+                    type: string
     Unauthorized:
       description: API Key 缺失或无效
       content:

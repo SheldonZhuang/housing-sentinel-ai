@@ -1,0 +1,112 @@
+{
+  "name": "房哨兵变化驱动轮询（since + ETag）",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 1 }]
+        }
+      },
+      "name": "每小时触发",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 读取上次保存的游标：nextSince 与 ETag（首次运行为空 → 拉全量快照）\nconst s = $getWorkflowStaticData('global');\nreturn [{ json: { since: s.nextSince || '', etag: s.etag || '' } }];"
+      },
+      "name": "读取游标",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.housingsentinel.cn/api/v1/signals{{ $json.since ? '?since=' + encodeURIComponent($json.since) : '' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "If-None-Match", "value": "={{ $json.etag }}" }]
+        },
+        "options": {
+          "response": {
+            "response": { "fullResponse": true, "neverError": true, "responseFormat": "json" }
+          },
+          "timeout": 30000
+        }
+      },
+      "name": "拉取信号（带 since / If-None-Match）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "房哨兵 API Key（Header: Authorization = Bearer hs_live_...）"
+        }
+      },
+      "notes": "fullResponse 以便读取 statusCode 与 ETag 头；neverError 让 304 正常流到下一节点。中国大陆部署的 n8n 可把域名换成 housingpi-proxy-anirmyfaea.cn-shanghai.fcapp.run"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 保存新游标，并整理出有变动的城市\nconst r = $input.first().json;\nconst s = $getWorkflowStaticData('global');\nconst status = r.statusCode;\nif (status === 304) return [{ json: { changed: [], status } }];\nif (status === 400) { delete s.nextSince; delete s.etag; return [{ json: { changed: [], status, error: r.body } }]; } // BAD_SINCE → 重置游标\nif (status !== 200) throw new Error(`房哨兵 HTTP ${status}: ${JSON.stringify(r.body)}`);\nconst body = r.body || {};\nconst headers = r.headers || {};\nif (headers.etag) s.etag = headers.etag;\ns.nextSince = body.nextSince || body.generatedAt || s.nextSince;\nconst cities = body.cities || [];\nconst changed = body.changedSince || cities.map(c => c.cityCode); // 首次无 since：全部视为变动\nconst lines = cities.map(c => `${c.city} ${c.dataDate}：${c.phase}（二手去化 ${c.secondHand?.inventoryCycle ?? '—'} 月）`);\nreturn [{ json: { changed, status, message: lines.join('\\n') } }];"
+      },
+      "name": "保存游标并整理",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.changed.length }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "changedSince 非空？",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {},
+      "name": "发送通知（占位，替换为企业微信/飞书/Slack/邮件节点）",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1100, -80],
+      "notes": "可用字段：{{ $json.changed }}（城市代码数组）、{{ $json.message }}（每城一行摘要）。企业微信示例见 examples/n8n-daily-alert.json 最后一个节点"
+    },
+    {
+      "parameters": {},
+      "name": "无变化，结束",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1100, 80]
+    }
+  ],
+  "connections": {
+    "每小时触发": { "main": [[{ "node": "读取游标", "type": "main", "index": 0 }]] },
+    "读取游标": { "main": [[{ "node": "拉取信号（带 since / If-None-Match）", "type": "main", "index": 0 }]] },
+    "拉取信号（带 since / If-None-Match）": { "main": [[{ "node": "保存游标并整理", "type": "main", "index": 0 }]] },
+    "保存游标并整理": { "main": [[{ "node": "changedSince 非空？", "type": "main", "index": 0 }]] },
+    "changedSince 非空？": {
+      "main": [
+        [{ "node": "发送通知（占位，替换为企业微信/飞书/Slack/邮件节点）", "type": "main", "index": 0 }],
+        [{ "node": "无变化，结束", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": {
+    "description": "每小时轮询房哨兵 /api/v1/signals，带上次的 nextSince 与 ETag：无变化时服务端返回 304，有变化时只返回变动城市，仅在 changedSince 非空时发通知。导入后：①在 HTTP 节点配置 Header 凭证 Authorization: Bearer hs_live_你的密钥 ②把占位节点换成你的通知渠道。注意：$getWorkflowStaticData 只在工作流激活（生产执行）时持久化，手动测试运行不会保存游标。"
+  }
+}

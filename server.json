@@ -7,7 +7,33 @@
     "source": "github"
   },
   "websiteUrl": "https://housingsentinel.cn",
-  "version": "1.2.0",
+  "version": "1.3.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "housing-sentinel-mcp",
+      "version": "1.3.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "HOUSING_SENTINEL_API_KEY",
+          "description": "API Key（hs_live_...），登录 housingsentinel.cn「我的→接入AI Agent」生成；新用户 3 天全 12 城免费试用",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "HOUSING_SENTINEL_URL",
+          "description": "可选：覆盖 MCP 端点，默认 https://api.housingsentinel.cn/mcp（中国大陆可用 https://housingpi-proxy-anirmyfaea.cn-shanghai.fcapp.run/mcp）",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ],
   "remotes": [
     {
       "type": "streamable-http",

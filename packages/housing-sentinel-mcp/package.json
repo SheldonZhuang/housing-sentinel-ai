@@ -1,0 +1,38 @@
+{
+  "name": "housing-sentinel-mcp",
+  "version": "1.3.0",
+  "description": "stdio MCP bridge for Housing Sentinel (房哨兵): official housing data & offense/defense signals for 12 Chinese cities",
+  "mcpName": "cn.housingsentinel/housing-sentinel",
+  "type": "module",
+  "bin": {
+    "housing-sentinel-mcp": "index.js"
+  },
+  "files": [
+    "index.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "housing",
+    "real-estate",
+    "china"
+  ],
+  "homepage": "https://housingsentinel.cn",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SheldonZhuang/housing-sentinel-ai.git",
+    "directory": "packages/housing-sentinel-mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/SheldonZhuang/housing-sentinel-ai/issues"
+  },
+  "license": "MIT"
+}
