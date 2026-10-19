@@ -575,6 +575,9 @@ components:
         isMonthlySnapshot:
           type: boolean
           description: true=月均来自月度快照而非当月日报投影
+        interrupted:
+          type: boolean
+          description: 仅出现在 secondHand：true=该城市二手成交数据源中断（最近二手记录早于数据日期>7天），此时 avgMonthly/inventoryCycle 为 null、phase="数据不足"（2026-10 起无锡）
     CitySignal:
       type: object
       properties:
